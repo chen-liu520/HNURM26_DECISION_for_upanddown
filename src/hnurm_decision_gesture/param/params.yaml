@@ -1,0 +1,32 @@
+/**:
+  ros__parameters:
+
+    # 红方巡航路径
+    red_goals_array:
+      cruise_goals: ["1.98,-0.90", "8.79,2.19"] # 己方半场巡航路径
+
+    # 蓝方巡航路径
+    blue_goals_array:
+      cruise_goals: ["1.98,-0.90", "8.79,2.19"] # 己方半场巡航路径
+
+    # 特殊区域
+    special_area:
+      upanddown_path: ["3.04,-2.08", "4.46,0.04", "6.20,1.25", "7.65,3.58"] # 红色起伏路段穿过路径,依次为左端出区域点，起伏起始点，起伏结束点，右端出区域点
+      upanddown_polygon: ["7.37,1.19", "6.55,2.31", "3.16,0.04", "4.09,-1.09"] # 小长方形
+      move_polygon: ["10.06,0.97", "7.03,5.23", "0.96,1.03", "0.51,-1.44", "2.71,-4.22"] # 巡航区域
+    global_position_topic: "/global_costmap/published_footprint"
+    cmd_vel_topic: "/cmd_vel"
+    cmd_vel_remap_topic: "/cmd_vel_remap"
+    gesture_pub_topic: "/decision/gesture"
+    recv_topic: "/vision_recv_data"
+    send_topic: "/vision_send_data"
+    back_target_topic: "/back_target"
+    human_goal_topic: "/clicked_point" # RViz中点击发送的目标点话题
+    yaw_change_topic: "/decision/change_yaw_angle" # 发布云台旋转命令的话题
+    relocalization_topic: "/decision/relocalization" # 发布重定位服务的话题
+    enter_upanddown_ControlID_pub_topic: "/decision/enter_upanddown_control_id" # 发布进入起伏路段消息的话题
+    relocalization_status_topic: "/registration_status" # 订阅重定位状态的话题
+
+
+    # 控制：
+    pursue_stay_circle_radius: 0.5 # 追击静止小陀螺的半径

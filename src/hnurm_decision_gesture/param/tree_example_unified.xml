@@ -1,0 +1,41 @@
+<?xml version="1.0"?>
+<!--
+  统一线程池方案示例行为树
+  
+  说明：
+  - ExampleUnifiedNode 使用统一回调组，不创建独立线程
+  - 可以与Nav2节点混用
+  - 所有ROS回调由decision2.cpp中的线程池调度
+-->
+<root main_tree_to_execute="MainTree">
+  <BehaviorTree ID="MainTree">
+    <!-- 使用Sequence控制节点 -->
+    <Sequence name="root_sequence">
+      
+      <!-- 示例节点：统一线程池方案 -->
+      <!-- 此节点订阅高频/中频/低频话题，使用共享回调组 -->
+      <ExampleUnifiedNode name="example_node"
+                          threshold="0.5"
+                          processed_value="{processed_val}"
+                          data_ready="{is_data_ready}"/>
+      
+      <!-- 可以在这里添加其他节点 -->
+      <!-- 
+      <Nav2节点... />
+      <其他自定义节点... />
+      -->
+      
+      <!-- 简单的条件判断 -->
+      <Fallback name="check_data">
+        <!-- 如果数据就绪，执行某些操作 -->
+        <Condition name="data_ready_check" condition="{is_data_ready}"/>
+        
+        <!-- 数据未就绪时的处理 -->
+        <Action name="wait_for_data" 
+                ID="Wait"
+                wait_duration="1.0"/>
+      </Fallback>
+      
+    </Sequence>
+  </BehaviorTree>
+</root>

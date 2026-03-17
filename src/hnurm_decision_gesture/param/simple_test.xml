@@ -1,0 +1,155 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<root BTCPP_format="3" main_tree_to_execute="decision">
+    <BehaviorTree ID="decision">
+        <ReactiveSequence>
+            <GameStart/>
+            <pubRobotStatus hp_status="{hp_status}" cruise_status="{cruise_status}" pursuit_status="{pursuit_status}" target_goal="{target_goal}" is_hp_ok="{is_hp_ok}" pursuit_mode1="{pursuit_mode1}" pursuit_mode2="{pursuit_mode2}" cruise_goal="{cruise_goal}" supply_goal="{supply_goal}" goal_pose_override="{goal_pose_override}" navigate_to_pose_status="{navigate_to_pose_status}" current_controller="{current_controller}" is_in_special_area="{is_in_special_area}" goal_poses="{goal_poses}" do_clear="{do_clear}"/>
+            <Parallel failure_threshold="2" success_threshold="2">
+                <WhileDoElse>
+                    <Status Status="{navigate_to_pose_status}"/>
+                    <SubTree ID="navigate_override_subtree" __shared_blackboard="true"/>
+                    <WhileDoElse>
+                        <Status Status="{hp_status}"/>
+                        <SubTree ID="addblood" __shared_blackboard="true"/>
+                        <WhileDoElse>
+                            <Status Status="{pursuit_status}"/>
+                            <SubTree ID="pursuit" __shared_blackboard="true"/>
+                            <WhileDoElse>
+                                <Status Status="{cruise_status}"/>
+                                <SubTree ID="cruise" __shared_blackboard="true"/>
+                                <AlwaysSuccess/>
+                            </WhileDoElse>
+                        </WhileDoElse>
+                    </WhileDoElse>
+                </WhileDoElse>
+                <WhileDoElse>
+                    <Status Status="{do_clear}"/>
+                    <ClearEntireCostmap service_name="local_costmap/clear_entirely_local_costmap" server_timeout="1000"/>
+                    <AlwaysSuccess/>
+                </WhileDoElse>
+            </Parallel>
+        </ReactiveSequence>
+    </BehaviorTree>
+    
+
+    <BehaviorTree ID="navigate_override_subtree">
+        <PipelineSequence name="NavigateToPoseOveride">
+            <RateController hz="50.0">
+                <Sequence>
+                    <GoalUpdater input_goal="{goal_pose_override}" output_goal="{updated_target_goal_override}">
+                        <ComputePathToPose goal="{updated_target_goal_override}" planner_id="GridBased" path="{goal_path_override}"/>
+                    </GoalUpdater>
+                    <TruncatePath distance="0.01" input_path="{goal_path_override}" output_path="{truncated_goal_path_override}"/>
+                </Sequence>
+            </RateController>
+            <KeepRunningUntilFailure>
+                <FollowPath controller_id="{current_controller}" path="{truncated_goal_path_override}"/>
+            </KeepRunningUntilFailure>
+        </PipelineSequence>
+    </BehaviorTree>
+
+    <BehaviorTree ID="addblood">
+        <PipelineSequence name="NavigateToKeepADistance">
+            <RateController hz="50.0">
+                <Sequence>
+                    <GoalUpdater input_goal="{supply_goal}" output_goal="{updated_target_goal}">
+                        <ComputePathToPose goal="{updated_target_goal}" planner_id="GridBased" path="{goal_path}"/>
+                    </GoalUpdater>
+                    <TruncatePath distance="0.1" input_path="{goal_path}" output_path="{truncated_goal_path}"/>
+                </Sequence>
+            </RateController>
+            <KeepRunningUntilFailure>
+                <FollowPath controller_id="FollowPath" path="{truncated_goal_path}"/>
+            </KeepRunningUntilFailure>
+        </PipelineSequence>
+    </BehaviorTree>
+
+    <BehaviorTree ID="pursuit">
+        <PipelineSequence name="NavigateWithReplanning">
+            <RateController hz="50.0">
+                <Sequence>
+                    <GoalUpdater input_goal="{target_goal}" output_goal="{updated_target_goal}">
+                        <ComputePathToPose goal="{updated_target_goal}" planner_id="GridBased" path="{goal_path}"/>
+                    </GoalUpdater>
+                    <TruncatePath distance="2.6" input_path="{goal_path}" output_path="{truncated_goal_path}"/>
+                </Sequence>
+            </RateController>
+            <KeepRunningUntilFailure>
+                <FollowPath controller_id="FollowPath" path="{truncated_goal_path}"/>
+            </KeepRunningUntilFailure>
+        </PipelineSequence>
+    </BehaviorTree>
+    
+    <BehaviorTree ID="cruise">
+        <PipelineSequence name="NavigateToKeepADistance">
+            <RateController hz="50.0">
+                <Sequence>
+                    <GoalUpdater input_goal="{cruise_goal}" output_goal="{updated_target_goal}">
+                        <ComputePathToPose goal="{updated_target_goal}" planner_id="GridBased" path="{goal_path}"/>
+                    </GoalUpdater>
+                    <TruncatePath distance="0.1" input_path="{goal_path}" output_path="{truncated_goal_path}"/>
+                </Sequence>
+            </RateController>
+            <KeepRunningUntilFailure>
+                <FollowPath controller_id="{current_controller}" path="{truncated_goal_path}"/>
+            </KeepRunningUntilFailure>
+        </PipelineSequence>
+    </BehaviorTree>
+
+    <TreeNodesModel>
+        <Action ID="ClearEntireCostmap">
+            <input_port name="service_name">Service name</input_port>
+            <input_port name="server_timeout">Server timeout</input_port>
+        </Action>
+        <Action ID="ComputePathToPose" editable="true">
+            <input_port name="goal">Destination to plan to</input_port>
+            <input_port name="planner_id">Mapped name to the planner plugin type to use</input_port>
+            <output_port name="path">Path created by ComputePathToPose node</output_port>
+        </Action>
+        <Action ID="FollowPath" editable="true">
+            <input_port name="controller_id" default="FollowPath"/>
+            <input_port name="path">Path to follow</input_port>
+        </Action>
+        <Condition ID="GameStart" editable="true"/>
+        <Decorator ID="GoalUpdater">
+            <input_port name="input_goal">Original goal in</input_port>
+            <output_port name="output_goal">Output goal set by subscription</output_port>
+        </Decorator>
+        <Action ID="NavigateToPose">
+            <input_port name="goal">Goal</input_port>
+        </Action>
+        <Control ID="PipelineSequence"/>
+        <Decorator ID="RateController">
+            <input_port name="hz">Rate</input_port>
+        </Decorator>
+        <Condition ID="Status" editable="true">
+            <input_port name="Status" default="{Status}"/>
+        </Condition>
+        <Action ID="TruncatePath">
+            <input_port name="distance">Distance before goal to truncate</input_port>
+            <input_port name="input_path">Path to truncate</input_port>
+            <output_port name="output_path">Truncated path to utilize</output_port>
+        </Action>
+        <Action ID="Wait">
+            <input_port name="wait_duration">Wait time</input_port>
+        </Action>
+        <Action ID="pubRobotStatus" editable="true">
+            <output_port name="hp_status" default="{hp_status}"/>
+            <output_port name="cruise_status" default="{cruise_status}"/>
+            <output_port name="pursuit_status" default="{pursuit_status}"/>
+            <output_port name="target_goal" default="{target_goal}"/>
+            <output_port name="is_hp_ok" default="{is_hp_ok}"/>
+            <output_port name="pursuit_mode1" default="{pursuit_mode1}"/>
+            <output_port name="pursuit_mode2" default="{pursuit_mode2}"/>
+            <output_port name="cruise_goal" default="{cruise_goal}"/>
+            <output_port name="supply_goal" default="{supply_goal}"/>
+            <output_port name="goal_pose_override" default="{goal_pose_override}"/>
+            <output_port name="navigate_to_pose_status" default="{navigate_to_pose_status}"/>
+            <output_port name="current_controller" default="{current_controller}"/>
+            <output_port name="is_in_special_area" default="{is_in_special_area}"/>
+            <output_port name="goal_poses" default="{goal_poses}"/>
+            <output_port name="do_clear" default="{do_clear}"/>
+        </Action>
+    </TreeNodesModel>
+
+</root>
