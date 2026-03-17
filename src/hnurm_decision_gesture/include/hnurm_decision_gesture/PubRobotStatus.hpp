@@ -240,6 +240,8 @@ namespace hnurm_behavior_trees
         // 进入起伏路段发布cotrol_id
         rclcpp::Publisher<std_msgs::msg::Float32>::SharedPtr enter_upanddown_ControlID_pub_;
 
+        rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr is_in_special_area_pub_; // 发布是否在特殊区域内的消息
+
         // ROS2定时器
         rclcpp::TimerBase::SharedPtr cruise_change_timer_; // 定时检查是否需要切换巡航路径的定时器
 

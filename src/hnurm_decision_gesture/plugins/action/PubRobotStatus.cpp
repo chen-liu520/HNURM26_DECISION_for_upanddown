@@ -168,6 +168,9 @@ namespace hnurm_behavior_trees
         // x. 进入起伏路段发布cotrol_id
         enter_upanddown_ControlID_pub_ = node_->create_publisher<std_msgs::msg::Float32>(enter_upanddown_ControlID_pub_topic_, 10);
 
+        //x. 发布是否在特殊区域内的消息
+        is_in_special_area_pub_ = node_->create_publisher<std_msgs::msg::Bool>("/is_in_special_area", rclcpp::SensorDataQoS());
+
         // xx.初始化tf2_ros::Buffer和tf2_ros::TransformListener
         tf_buffer_ = std::make_shared<tf2_ros::Buffer>(node_->get_clock());
         tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
@@ -530,10 +533,10 @@ namespace hnurm_behavior_trees
         geometry_msgs::msg::Twist cmd_vel;
         cmd_vel.linear.x = 0.0; // 显式初始化
         cmd_vel.linear.y = 0.0;
-        cmd_vel.linear.z = 0.0;
+        cmd_vel.linear.z = recv_robot_information_.yaw;
         cmd_vel.angular.x = 0.0;
         cmd_vel.angular.y = 0.0;
-        cmd_vel.angular.z = recv_robot_information_.yaw;
+        cmd_vel.angular.z = 0.0;
 
         if (current_upanddown_goal_vector_.empty())
         {
@@ -620,7 +623,7 @@ namespace hnurm_behavior_trees
         if (upanddown_nav_status_ == UpAndDownNavStatus::SPIN)
         {
             // 计算目标绝对角度 = 当前绝对角度 + 角度误差
-            cmd_vel.angular.z = recv_robot_information_.yaw + yaw_error_deg;
+            cmd_vel.linear.z = recv_robot_information_.yaw + std::clamp(yaw_error_deg, -20.0, 20.0);
             if (std::fabs(yaw_error) < spin_done_yaw_err)
             {
                 upanddown_nav_status_ = UpAndDownNavStatus::LINEAR;
@@ -631,7 +634,7 @@ namespace hnurm_behavior_trees
         if (std::fabs(yaw_error) > re_spin_yaw_err)
         {
             upanddown_nav_status_ = UpAndDownNavStatus::SPIN;
-            cmd_vel.angular.z = recv_robot_information_.yaw + yaw_error_deg;
+            cmd_vel.linear.z = recv_robot_information_.yaw + std::clamp(yaw_error_deg, -20.0, 20.0);
             return cmd_vel;
         }
 
@@ -642,7 +645,7 @@ namespace hnurm_behavior_trees
         // LINEAR模式下计算目标绝对角度
         if(std::abs(yaw_error_deg) < 10.0)
             yaw_error_deg = 0.0; // 当角度误差较小时，认为不需要调整角度，避免震荡
-        cmd_vel.angular.z = recv_robot_information_.yaw + yaw_error_deg;
+        cmd_vel.linear.z = recv_robot_information_.yaw + std::clamp(yaw_error_deg, -20.0, 20.0);
         return cmd_vel;
     }
 
@@ -916,10 +919,12 @@ namespace hnurm_behavior_trees
 
         if (is_in_upanddown_area_)
         {
+            is_in_special_area_pub_->publish(std_msgs::msg::Bool().set__data(true));
             enter_upanddown_ControlID_pub_->publish(std_msgs::msg::Float32().set__data(25.0)); // 进入起伏路段时发布25.0，下位机切换底盘跟随模式
         }
         else
         {
+            is_in_special_area_pub_->publish(std_msgs::msg::Bool().set__data(false));
             enter_upanddown_ControlID_pub_->publish(std_msgs::msg::Float32().set__data(50.0));
         }
         RCLCPP_INFO_THROTTLE(node_->get_logger(), *node_->get_clock(), 500, "\033[35m----------------------------------------------------------------\033[0m");
