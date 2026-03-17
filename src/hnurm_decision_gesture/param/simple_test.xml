@@ -3,21 +3,36 @@
     <BehaviorTree ID="decision">
         <ReactiveSequence>
             <GameStart/>
-            <pubRobotStatus hp_status="{hp_status}" cruise_status="{cruise_status}" pursuit_status="{pursuit_status}" target_goal="{target_goal}" is_hp_ok="{is_hp_ok}" pursuit_mode1="{pursuit_mode1}" pursuit_mode2="{pursuit_mode2}" cruise_goal="{cruise_goal}" supply_goal="{supply_goal}" goal_pose_override="{goal_pose_override}" navigate_to_pose_status="{navigate_to_pose_status}" current_controller="{current_controller}" is_in_special_area="{is_in_special_area}" goal_poses="{goal_poses}" do_clear="{do_clear}"/>
+            <PubRobotStatus 
+                pose_from_human="{pose_from_human}"
+                need_supply="{need_supply}"
+                is_pursue="{is_pursue}"
+                is_cruise="{is_cruise}"
+                is_in_upanddown_area="{is_in_upanddown_area}"
+                upanddown_goal="{upanddown_goal}"
+                human_goal="{human_goal}"
+                supply_goal="{supply_goal}"
+                pursue_goal="{pursue_goal}"
+                cruise_goal="{cruise_goal}"
+                current_controller="{current_controller}"/>
             <Parallel failure_threshold="2" success_threshold="2">
                 <WhileDoElse>
-                    <Status Status="{navigate_to_pose_status}"/>
-                    <SubTree ID="navigate_override_subtree" __shared_blackboard="true"/>
+                    <Status Status="{is_in_upanddown_area}"/>
+                    <SubTree ID="upanddown_subtree" __shared_blackboard="true"/>
                     <WhileDoElse>
-                        <Status Status="{hp_status}"/>
-                        <SubTree ID="addblood" __shared_blackboard="true"/>
+                        <Status Status="{pose_from_human}"/>
+                        <SubTree ID="human_goal_subtree" __shared_blackboard="true"/>
                         <WhileDoElse>
-                            <Status Status="{pursuit_status}"/>
-                            <SubTree ID="pursuit" __shared_blackboard="true"/>
+                            <Status Status="{need_supply}"/>
+                            <SubTree ID="supply_subtree" __shared_blackboard="true"/>
                             <WhileDoElse>
-                                <Status Status="{cruise_status}"/>
-                                <SubTree ID="cruise" __shared_blackboard="true"/>
-                                <AlwaysSuccess/>
+                                <Status Status="{is_pursue}"/>
+                                <SubTree ID="pursuit_subtree" __shared_blackboard="true"/>
+                                <WhileDoElse>
+                                    <Status Status="{is_cruise}"/>
+                                    <SubTree ID="cruise_subtree" __shared_blackboard="true"/>
+                                    <AlwaysSuccess/>
+                                </WhileDoElse>
                             </WhileDoElse>
                         </WhileDoElse>
                     </WhileDoElse>
@@ -31,67 +46,85 @@
         </ReactiveSequence>
     </BehaviorTree>
     
-
-    <BehaviorTree ID="navigate_override_subtree">
-        <PipelineSequence name="NavigateToPoseOveride">
+    <!-- 起伏路段导航子树 -->
+    <BehaviorTree ID="upanddown_subtree">
+        <PipelineSequence name="NavigateInUpAndDownArea">
             <RateController hz="50.0">
                 <Sequence>
-                    <GoalUpdater input_goal="{goal_pose_override}" output_goal="{updated_target_goal_override}">
-                        <ComputePathToPose goal="{updated_target_goal_override}" planner_id="GridBased" path="{goal_path_override}"/>
-                    </GoalUpdater>
-                    <TruncatePath distance="0.01" input_path="{goal_path_override}" output_path="{truncated_goal_path_override}"/>
+                    <ComputePathToPose goal="{upanddown_goal}" planner_id="GridBased" path="{upanddown_path}"/>
+                    <TruncatePath distance="0.1" input_path="{upanddown_path}" output_path="{truncated_upanddown_path}"/>
                 </Sequence>
             </RateController>
             <KeepRunningUntilFailure>
-                <FollowPath controller_id="{current_controller}" path="{truncated_goal_path_override}"/>
+                <FollowPath controller_id="{current_controller}" path="{truncated_upanddown_path}"/>
             </KeepRunningUntilFailure>
         </PipelineSequence>
     </BehaviorTree>
 
-    <BehaviorTree ID="addblood">
-        <PipelineSequence name="NavigateToKeepADistance">
+    <!-- 人类目标点子树 -->
+    <BehaviorTree ID="human_goal_subtree">
+        <PipelineSequence name="NavigateToHumanGoal">
             <RateController hz="50.0">
                 <Sequence>
-                    <GoalUpdater input_goal="{supply_goal}" output_goal="{updated_target_goal}">
-                        <ComputePathToPose goal="{updated_target_goal}" planner_id="GridBased" path="{goal_path}"/>
+                    <GoalUpdater input_goal="{human_goal}" output_goal="{updated_human_goal}">
+                        <ComputePathToPose goal="{updated_human_goal}" planner_id="GridBased" path="{human_goal_path}"/>
                     </GoalUpdater>
-                    <TruncatePath distance="0.1" input_path="{goal_path}" output_path="{truncated_goal_path}"/>
+                    <TruncatePath distance="0.1" input_path="{human_goal_path}" output_path="{truncated_human_goal_path}"/>
                 </Sequence>
             </RateController>
             <KeepRunningUntilFailure>
-                <FollowPath controller_id="FollowPath" path="{truncated_goal_path}"/>
+                <FollowPath controller_id="{current_controller}" path="{truncated_human_goal_path}"/>
             </KeepRunningUntilFailure>
         </PipelineSequence>
     </BehaviorTree>
 
-    <BehaviorTree ID="pursuit">
+    <!-- 补给子树 -->
+    <BehaviorTree ID="supply_subtree">
+        <PipelineSequence name="NavigateToSupply">
+            <RateController hz="50.0">
+                <Sequence>
+                    <GoalUpdater input_goal="{supply_goal}" output_goal="{updated_supply_goal}">
+                        <ComputePathToPose goal="{updated_supply_goal}" planner_id="GridBased" path="{supply_path}"/>
+                    </GoalUpdater>
+                    <TruncatePath distance="0.1" input_path="{supply_path}" output_path="{truncated_supply_path}"/>
+                </Sequence>
+            </RateController>
+            <KeepRunningUntilFailure>
+                <FollowPath controller_id="FollowPath" path="{truncated_supply_path}"/>
+            </KeepRunningUntilFailure>
+        </PipelineSequence>
+    </BehaviorTree>
+
+    <!-- 追击子树 -->
+    <BehaviorTree ID="pursuit_subtree">
         <PipelineSequence name="NavigateWithReplanning">
             <RateController hz="50.0">
                 <Sequence>
-                    <GoalUpdater input_goal="{target_goal}" output_goal="{updated_target_goal}">
-                        <ComputePathToPose goal="{updated_target_goal}" planner_id="GridBased" path="{goal_path}"/>
+                    <GoalUpdater input_goal="{pursue_goal}" output_goal="{updated_pursue_goal}">
+                        <ComputePathToPose goal="{updated_pursue_goal}" planner_id="GridBased" path="{pursue_path}"/>
                     </GoalUpdater>
-                    <TruncatePath distance="2.6" input_path="{goal_path}" output_path="{truncated_goal_path}"/>
+                    <TruncatePath distance="2.6" input_path="{pursue_path}" output_path="{truncated_pursue_path}"/>
                 </Sequence>
             </RateController>
             <KeepRunningUntilFailure>
-                <FollowPath controller_id="FollowPath" path="{truncated_goal_path}"/>
+                <FollowPath controller_id="FollowPath" path="{truncated_pursue_path}"/>
             </KeepRunningUntilFailure>
         </PipelineSequence>
     </BehaviorTree>
     
-    <BehaviorTree ID="cruise">
-        <PipelineSequence name="NavigateToKeepADistance">
+    <!-- 巡航子树 -->
+    <BehaviorTree ID="cruise_subtree">
+        <PipelineSequence name="NavigateCruise">
             <RateController hz="50.0">
                 <Sequence>
-                    <GoalUpdater input_goal="{cruise_goal}" output_goal="{updated_target_goal}">
-                        <ComputePathToPose goal="{updated_target_goal}" planner_id="GridBased" path="{goal_path}"/>
+                    <GoalUpdater input_goal="{cruise_goal}" output_goal="{updated_cruise_goal}">
+                        <ComputePathToPose goal="{updated_cruise_goal}" planner_id="GridBased" path="{cruise_path}"/>
                     </GoalUpdater>
-                    <TruncatePath distance="0.1" input_path="{goal_path}" output_path="{truncated_goal_path}"/>
+                    <TruncatePath distance="0.1" input_path="{cruise_path}" output_path="{truncated_cruise_path}"/>
                 </Sequence>
             </RateController>
             <KeepRunningUntilFailure>
-                <FollowPath controller_id="{current_controller}" path="{truncated_goal_path}"/>
+                <FollowPath controller_id="{current_controller}" path="{truncated_cruise_path}"/>
             </KeepRunningUntilFailure>
         </PipelineSequence>
     </BehaviorTree>
@@ -115,9 +148,6 @@
             <input_port name="input_goal">Original goal in</input_port>
             <output_port name="output_goal">Output goal set by subscription</output_port>
         </Decorator>
-        <Action ID="NavigateToPose">
-            <input_port name="goal">Goal</input_port>
-        </Action>
         <Control ID="PipelineSequence"/>
         <Decorator ID="RateController">
             <input_port name="hz">Rate</input_port>
@@ -133,22 +163,18 @@
         <Action ID="Wait">
             <input_port name="wait_duration">Wait time</input_port>
         </Action>
-        <Action ID="pubRobotStatus" editable="true">
-            <output_port name="hp_status" default="{hp_status}"/>
-            <output_port name="cruise_status" default="{cruise_status}"/>
-            <output_port name="pursuit_status" default="{pursuit_status}"/>
-            <output_port name="target_goal" default="{target_goal}"/>
-            <output_port name="is_hp_ok" default="{is_hp_ok}"/>
-            <output_port name="pursuit_mode1" default="{pursuit_mode1}"/>
-            <output_port name="pursuit_mode2" default="{pursuit_mode2}"/>
-            <output_port name="cruise_goal" default="{cruise_goal}"/>
-            <output_port name="supply_goal" default="{supply_goal}"/>
-            <output_port name="goal_pose_override" default="{goal_pose_override}"/>
-            <output_port name="navigate_to_pose_status" default="{navigate_to_pose_status}"/>
-            <output_port name="current_controller" default="{current_controller}"/>
-            <output_port name="is_in_special_area" default="{is_in_special_area}"/>
-            <output_port name="goal_poses" default="{goal_poses}"/>
-            <output_port name="do_clear" default="{do_clear}"/>
+        <Action ID="PubRobotStatus" editable="true">
+            <output_port name="pose_from_human" default="{pose_from_human}">人类打断标志</output_port>
+            <output_port name="need_supply" default="{need_supply}">补给标志</output_port>
+            <output_port name="is_pursue" default="{is_pursue}">追击标志</output_port>
+            <output_port name="is_cruise" default="{is_cruise}">巡航标志</output_port>
+            <output_port name="is_in_upanddown_area" default="{is_in_upanddown_area}">起伏路段标志</output_port>
+            <output_port name="upanddown_goal" default="{upanddown_goal}">起伏路段目标点</output_port>
+            <output_port name="human_goal" default="{human_goal}">人类目标点</output_port>
+            <output_port name="supply_goal" default="{supply_goal}">补给目标点</output_port>
+            <output_port name="pursue_goal" default="{pursue_goal}">追击目标点</output_port>
+            <output_port name="cruise_goal" default="{cruise_goal}">巡航目标点</output_port>
+            <output_port name="current_controller" default="{current_controller}">当前控制器ID</output_port>
         </Action>
     </TreeNodesModel>
 

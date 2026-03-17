@@ -5,27 +5,30 @@
 #include <behaviortree_cpp_v3/action_node.h>
 #include <behaviortree_cpp_v3/condition_node.h>
 
-#include <GameStart.hpp>
+#include <hnurm_decision_gesture/GameStart.hpp>
 
-#include <PubRobotStatus.hpp>
+#include <hnurm_decision_gesture/PubRobotStatus.hpp>
+#include <hnurm_decision_gesture/Status.hpp>
 #include <filesystem>
 #include <ament_index_cpp/get_package_share_directory.hpp>
 
 int main(int argc, char *argv[])
 {
     rclcpp::init(argc, argv);
-    auto node = rclcpp::Node::make_shared("bt_node");
+    // 使用可执行文件名作为节点名，确保与launch文件中的节点名匹配
+    auto node = rclcpp::Node::make_shared("decision_node");
     // std::string path = "/home/rm/slam/ws/src/hnu-vision-ros/hnurm_decision/src/decision.xml";
-    std::string base_dir = ament_index_cpp::get_package_share_directory("hnurm_small_decision");
+    std::string base_dir = ament_index_cpp::get_package_share_directory("hnurm_decision_gesture");
 
-    std::string path = base_dir + "/param/tree.xml";
+    std::string path = base_dir + "/param/simple_test.xml";
 
     BT::BehaviorTreeFactory factory; // 创建行为树工厂
     BT::SharedLibrary loader;        // 共享库加载器
 
     // 注册自定义节点
-    factory.registerNodeType<hnurm_small_decision::GameStart>("GameStart");
-    factory.registerNodeType<hnurm_small_decision::PubRobotStatus>("PubRobotStatus");
+    factory.registerNodeType<hnurm_behavior_trees::GameStart>("GameStart");
+    factory.registerNodeType<hnurm_behavior_trees::Status>("Status");
+    factory.registerNodeType<hnurm_behavior_trees::PubRobotStatus>("PubRobotStatus");
 
     // 加载Nav2的行为树节点插件
     factory.registerFromPlugin(loader.getOSName("nav2_is_stuck_condition_bt_node"));

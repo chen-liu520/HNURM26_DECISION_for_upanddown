@@ -1,4 +1,4 @@
-#include "GameStart.hpp"
+#include "hnurm_decision_gesture/GameStart.hpp"
 #include <termios.h>
 #include <unistd.h>
 #include <iostream>
@@ -37,11 +37,13 @@ namespace hnurm_behavior_trees
     {
         std::lock_guard<std::mutex> lock(mutex_);
 
+        /*
         if (game_progress_ > threshold_)
         {
             return BT::NodeStatus::SUCCESS;
         }
-        return BT::NodeStatus::FAILURE;
+        return BT::NodeStatus::FAILURE;*/
+        return BT::NodeStatus::SUCCESS;
     }
 
     void GameStart::gameStartCallback(const hnurm_interfaces::msg::VisionRecvData::SharedPtr msg)

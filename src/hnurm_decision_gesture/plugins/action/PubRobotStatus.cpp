@@ -1,4 +1,4 @@
-#include "PubRobotStatus.hpp"
+#include "hnurm_decision_gesture/PubRobotStatus.hpp"
 #include <string>
 #include "hnurm_interfaces/msg/gesture.hpp"
 #include "behaviortree_cpp_v3/basic_types.h"
@@ -61,6 +61,8 @@ namespace hnurm_behavior_trees
         current_cruise_mode_ = CruiseMode::MY_HALF;                        // 初始化为默认巡航模式
         current_cruise_mode_start_time = std::chrono::steady_clock::now(); // 初始化巡航模式开始时间
         is_cruise_ = true;                                                 // 默认初始为巡航模式
+        is_in_upanddown_area_ = false;                                     // 初始化起伏路段状态
+        is_current_fill_upanddown_goal_vector_ = false;                    // 初始化起伏路段目标队列填充状态
         FillGoalsDeque_Cruise();
 
         if (self_color_ == SelfColor::RED)
@@ -81,6 +83,8 @@ namespace hnurm_behavior_trees
     {
         const std::string GREEN = "\033[32m";
         const std::string RESET = "\033[0m";
+        RCLCPP_INFO(node_->get_logger(), "[structure_get_cruise_paths] 开始读取%s方巡航路径", color.c_str());
+        
         std::vector<std::string> cruise_goals_names = {
             "cruise_goals"};
         for (const auto &name : cruise_goals_names)
@@ -88,6 +92,8 @@ namespace hnurm_behavior_trees
             std::string param_name = color + "_goals_array." + name;
             node_->declare_parameter(param_name, std::vector<std::string>());
             auto goals_str = node_->get_parameter_or(param_name, std::vector<std::string>());
+            
+            RCLCPP_INFO(node_->get_logger(), "[structure_get_cruise_paths] 参数 %s: 读取到 %zu 个值", param_name.c_str(), goals_str.size());
 
             if (!goals_str.empty())
             {
@@ -175,6 +181,8 @@ namespace hnurm_behavior_trees
         // 绿色ANSI颜色代码
         const std::string GREEN = "\033[32m";
         const std::string RESET = "\033[0m";
+
+        RCLCPP_INFO(node_->get_logger(), "[structure_get_params] 开始读取参数，节点名称: %s", node_->get_name());
 
         // 0. 声明参数
         node_->declare_parameter("cmd_vel_topic", std::string("/cmd_vel"));
@@ -271,6 +279,9 @@ namespace hnurm_behavior_trees
         node_->declare_parameter("special_area.upanddown_path", std::vector<std::string>());
         auto red_upanddown_path = node_->get_parameter_or(
             "special_area.upanddown_path", std::vector<std::string>());
+        
+        RCLCPP_INFO(node_->get_logger(), "[structure_get_params] 参数 special_area.upanddown_path: 读取到 %zu 个值", red_upanddown_path.size());
+        
         if (!red_upanddown_path.empty())
         {
             std::vector<GlobalPose> path_points;
@@ -307,6 +318,7 @@ namespace hnurm_behavior_trees
 
         // 1. 检查导航目标是否到达，如果到达则更新目标点队列
         CheckIsReached_Update(0.2); // 内部不再加锁
+        setOutput("current_controller", "Omni");
 
         // 2. 根据状态机逻辑设置黑板变量
         //******************待尝试，直接用，不去用有限状态机去更新 *****************/
@@ -389,10 +401,7 @@ namespace hnurm_behavior_trees
         {
             if (distance <= threshold) // 到达目标点
             {
-                // 这里不弹出队列，因为这个目标点是来自云台手的实时输入，不是预设的巡航点，保持最新输入即可
                 RCLCPP_INFO(node_->get_logger(), "\033[34m[CheckIsReached_Update] 已到达云台手目标点\033[0m");
-                // 根据目标点所属区域更新巡航状态
-                change_cruise_mode_aft_human_goal();
             }
         }
         else if (is_need_supply_)
@@ -401,8 +410,7 @@ namespace hnurm_behavior_trees
             {
                 RCLCPP_INFO(node_->get_logger(), "\033[34m[CheckIsReached_Update] 已到达补给点\033[0m");
                 previous_cruise_mode_ = current_cruise_mode_;      // 记录上一个巡航模式
-                current_cruise_mode_ = CruiseMode::HIGHLAND_MIXED; // 补给完成后默认切换回我方半场巡航
-                // is_need_supply_ = false;  ！！！不能重置补给标志位，补给完成需要血量判断
+                current_cruise_mode_ = CruiseMode::HIGHLAND_MIXED;
             }
         }
         else if (is_cruise_)
@@ -436,26 +444,45 @@ namespace hnurm_behavior_trees
     {
         if (is_current_fill_upanddown_goal_vector_)
             return;
+        
+        // 检查路径是否存在且至少有2个点
+        auto& path = upanddown_through_paths_[SpecialAreaType::UPANDDOWN_AREA];
+        if (path.size() < 2)
+        {
+            RCLCPP_WARN(node_->get_logger(), "\033[36m[FillGoalsVector_UpAndDown] 起伏路段路径点数量不足(%zu < 2)，无法填充目标队列\033[0m", path.size());
+            is_current_fill_upanddown_goal_vector_ = true;
+            return;
+        }
+        
         if (current_my_area_ == SpecialAreaType::UPANDDOWN_AREA)
         {
-            if (calculate_distance(current_x_y_, upanddown_through_paths_[SpecialAreaType::UPANDDOWN_AREA].front()) < calculate_distance(current_x_y_, upanddown_through_paths_[SpecialAreaType::UPANDDOWN_AREA].back()))
+            if (calculate_distance(current_x_y_, path.front()) < calculate_distance(current_x_y_, path.back()))
             {
-                for (int i = 1; i < upanddown_through_paths_[SpecialAreaType::UPANDDOWN_AREA].size(); ++i)
+                for (size_t i = 1; i < path.size(); ++i)
                 {
-                    current_upanddown_goal_vector_.push_back(upanddown_through_paths_[SpecialAreaType::UPANDDOWN_AREA][i]);
+                    current_upanddown_goal_vector_.push_back(path[i]);
                 }
             }
             else
             {
-                for (int i = upanddown_through_paths_[SpecialAreaType::UPANDDOWN_AREA].size() - 2; i >= 0; --i)
+                // 使用有符号整数避免下溢
+                for (int i = static_cast<int>(path.size()) - 2; i >= 0; --i)
                 {
-                    current_upanddown_goal_vector_.push_back(upanddown_through_paths_[SpecialAreaType::UPANDDOWN_AREA][i]);
+                    current_upanddown_goal_vector_.push_back(path[i]);
                 }
             }
         }
 
         is_current_fill_upanddown_goal_vector_ = true;
-        relocalization_point_ = current_upanddown_goal_vector_[1];
+        // 检查队列大小，避免越界访问
+        if (current_upanddown_goal_vector_.size() >= 2)
+        {
+            relocalization_point_ = current_upanddown_goal_vector_[1];
+        }
+        else if (!current_upanddown_goal_vector_.empty())
+        {
+            relocalization_point_ = current_upanddown_goal_vector_.back();
+        }
         RCLCPP_INFO(node_->get_logger(), "\033[36m[FillGoalsVector_UpAndDown] 已填充起伏路段目标点队列，当前队列长度: %zu\033[0m", current_upanddown_goal_vector_.size());
     }
 
@@ -541,10 +568,10 @@ namespace hnurm_behavior_trees
         constexpr double goal_reached_dist = 0.10; // 到达目标点的距离阈值
         constexpr double spin_done_yaw_err = 0.10; // 自旋完成的角度误差阈值
         constexpr double re_spin_yaw_err = 0.15;    // 重新进入自旋的角度误差阈值
-        constexpr double k_spin = 1.0;             // 自旋控制增益
-        constexpr double k_drive_w = 0.8;          // 直线行驶时的角速度控制增益
-        constexpr double w_spin_max = 1.2;         // 自旋最大角速度
-        constexpr double w_drive_max = 0.8;        // 直线行使时最大角速度
+        //constexpr double k_spin = 1.0;             // 自旋控制增益
+        //constexpr double k_drive_w = 0.8;          // 直线行驶时的角速度控制增益
+        //constexpr double w_spin_max = 1.2;         // 自旋最大角速度
+        //constexpr double w_drive_max = 0.8;        // 直线行使时最大角速度
         constexpr double v_max = 0.6;              // 线速度最大速度
 
         if (dist < goal_reached_dist)
@@ -566,9 +593,14 @@ namespace hnurm_behavior_trees
             upanddown_nav_status_ = UpAndDownNavStatus::SPIN;
         }
 
+        // 将弧度误差转换为角度误差（电控需要绝对角度，单位为度）
+        constexpr double RAD_TO_DEG = 180.0 / 3.14159265358979323846;
+        double yaw_error_deg = yaw_error * RAD_TO_DEG;
+
         if (upanddown_nav_status_ == UpAndDownNavStatus::SPIN)
         {
-            cmd_vel.angular.z += std::clamp(k_spin * yaw_error, -w_spin_max, w_spin_max); // 直接用yaw_error控制旋转，目标是将yaw_error旋转到0
+            // 计算目标绝对角度 = 当前绝对角度 + 角度误差
+            cmd_vel.angular.z = recv_robot_information_.yaw + yaw_error_deg;
             if (std::fabs(yaw_error) < spin_done_yaw_err)
             {
                 upanddown_nav_status_ = UpAndDownNavStatus::LINEAR;
@@ -579,15 +611,18 @@ namespace hnurm_behavior_trees
         if (std::fabs(yaw_error) > re_spin_yaw_err)
         {
             upanddown_nav_status_ = UpAndDownNavStatus::SPIN;
-            cmd_vel.angular.z += std::clamp(k_spin * yaw_error, -w_spin_max, w_spin_max);
+            cmd_vel.angular.z = recv_robot_information_.yaw + yaw_error_deg;
             return cmd_vel;
         }
 
         // 小于3.5米时，速度为0.5*距离，范围减小；反之，速度为0.9*距离，范围增大，但都限制在合理范围内，避免过快或过慢
-        const double v_ff = (dist < 0.35) ? std::clamp(0.5 * dist, 0.10, 0.25) : std::clamp(0.9 * dist, 0.10, v_max);
+        const double v_ff = (dist < 0.2) ? std::clamp(0.5 * dist, 0.10, 0.25) : std::clamp(0.9 * dist, 0.10, v_max);
         cmd_vel.linear.x = v_ff;
         cmd_vel.linear.y = 0.0;
-        cmd_vel.angular.z += std::clamp(k_drive_w * yaw_error, -w_drive_max, w_drive_max); // 如果连续抖动，写0
+        // LINEAR模式下计算目标绝对角度
+        if(std::abs(yaw_error_deg) < 10.0)
+            yaw_error_deg = 0.0; // 当角度误差较小时，认为不需要调整角度，避免震荡
+        cmd_vel.angular.z = recv_robot_information_.yaw + yaw_error_deg;
         return cmd_vel;
     }
 
@@ -737,6 +772,8 @@ namespace hnurm_behavior_trees
             return "cruise_goals_opponent_fort";
         case CruiseMode::MY_HALF:
             return "moving";
+        case CruiseMode::HIGHLAND:
+            return "cruise_goals_highland";
         case CruiseMode::OPPONENT_HALF:
             return "cruise_goals_opponent_half";
         case CruiseMode::HIGHLAND_AMBUSH:
@@ -864,13 +901,15 @@ namespace hnurm_behavior_trees
         {
             enter_upanddown_ControlID_pub_->publish(std_msgs::msg::Float32().set__data(50.0));
         }
-        RCLCPP_INFO_THROTTLE(node_->get_logger(), *node_->get_clock(), 500, "\033[35m【定时器状态和数据打印】：当前总状态%s，当前巡航模式：%s，当前是否在起伏路段：%s\033[0m",
+        RCLCPP_INFO_THROTTLE(node_->get_logger(), *node_->get_clock(), 500, "\033[35m----------------------------------------------------------------\033[0m");
+        RCLCPP_INFO_THROTTLE(node_->get_logger(), *node_->get_clock(), 500, "\033[35m【定时器状态和数据打印】：当前总状态：%s，当前巡航模式：%s，当前是否在起伏路段：%s\033[0m",
                              is_pose_from_human_ ? "人类打断" : (is_need_supply_ ? "补给" : (is_pursue_ ? "追击" : (is_cruise_ ? "巡航" : "其他"))),
-                             cruiseModeToString(current_cruise_mode_).c_str(), +is_in_upanddown_area_ ? "是" : "否");
+                             cruiseModeToString(current_cruise_mode_).c_str(), is_in_upanddown_area_ ? "是" : "否");
         RCLCPP_INFO_THROTTLE(node_->get_logger(), *node_->get_clock(), 500, "\033[35m当前坐标: (%.2f, %.2f)，当前区域: %s\033[0m",
                              current_x_y_.pose_x, current_x_y_.pose_y,
                              current_my_area_ == SpecialAreaType::UPANDDOWN_AREA ? "起伏路段" : (current_my_area_ == SpecialAreaType::MOVE_AREA ? "移动区域" : "非法区域"));
-        RCLCPP_INFO_THROTTLE(node_->get_logger(), *node_->get_clock(), 500, "\033[35md当前起伏路段状态：%s\033[0m", upanddownNavStatusToString(upanddown_nav_status_).c_str());
+        RCLCPP_INFO_THROTTLE(node_->get_logger(), *node_->get_clock(), 500, "\033[35m当前起伏路段状态：%s\033[0m", upanddownNavStatusToString(upanddown_nav_status_).c_str());
+        RCLCPP_INFO_THROTTLE(node_->get_logger(), *node_->get_clock(), 500, "\033[35m----------------------------------------------------------------\033[0m");
     }
 
     /**************************回调函数 end*********************************/

@@ -19,15 +19,67 @@ find_package(tf2_geometry_msgs REQUIRED)
 find_package(ament_index_cpp REQUIRED)
 find_package(hnurm_interfaces REQUIRED)
 find_package(visualization_msgs REQUIRED)
+find_package(std_srvs REQUIRED)
+
+# Include directories
+include_directories(
+  include
+  ${ament_INCLUDE_DIRS}
+)
+
+# Define source files
+set(PLUGIN_SOURCES
+  plugins/action/PubRobotStatus.cpp
+  plugins/condition/GameStart.cpp
+  plugins/condition/Status.cpp
+)
+
+# Create executable
+add_executable(decision_node 
+  src/decision.cpp
+  ${PLUGIN_SOURCES}
+)
+
+# Set target dependencies
+ament_target_dependencies(decision_node
+  rclcpp
+  behaviortree_cpp_v3
+  std_msgs
+  nav_msgs
+  geometry_msgs
+  tf2
+  tf2_ros
+  tf2_eigen
+  tf2_geometry_msgs
+  ament_index_cpp
+  hnurm_interfaces
+  visualization_msgs
+  std_srvs
+)
+
+# Install executable
+install(TARGETS decision_node
+  DESTINATION lib/${PROJECT_NAME}
+)
+
+# Install include directory
+install(DIRECTORY include/
+  DESTINATION include
+)
+
+# Install launch files
+install(DIRECTORY launch
+  DESTINATION share/${PROJECT_NAME}
+)
+
+# Install param files
+install(DIRECTORY param
+  DESTINATION share/${PROJECT_NAME}
+)
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
-  # the following line skips the linter which checks for copyrights
-  # comment the line when a copyright and license is added to all source files
   set(ament_cmake_copyright_FOUND TRUE)
-  # the following line skips cpplint (only works in a git repo)
-  # comment the line when this package is in a git repo and when
-  # a copyright and license is added to all source files
   set(ament_cmake_cpplint_FOUND TRUE)
   ament_lint_auto_find_test_dependencies()
 endif()

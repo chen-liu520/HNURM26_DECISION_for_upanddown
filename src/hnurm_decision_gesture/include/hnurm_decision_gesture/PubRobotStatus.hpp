@@ -96,10 +96,6 @@ namespace hnurm_behavior_trees
         std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
         std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
 
-        enum class SpecialAreaType; // 向前声明
-        enum class CruiseMode;      // 向前声明
-        enum class UpAndDownNavStatus; // 向前声明
-
         enum class SelfColor
         {
             RED,
@@ -114,6 +110,35 @@ namespace hnurm_behavior_trees
         bool is_stop_ = false; // 标记是否需要停止
 
     private:
+        // 前向声明枚举类型（在函数声明之前定义）
+        enum class CruiseMode
+        {
+            HUMAN,         // 云台手发送的目标点
+            SUPPLY,        // 补给点
+            MY_FORT,       // 我方堡垒点
+            OPPONENT_FORT, // 敌方堡垒点
+            MY_HALF,       // 我方半场路径
+            OPPONENT_HALF, // 敌方半场路径
+            HIGHLAND,        // 高地-默认环绕路径
+            HIGHLAND_AMBUSH, // 高地-阻击路径（前哨区域）
+            HIGHLAND_MIXED   // 高地-混合路径
+        };
+
+        enum class SpecialAreaType
+        {
+            MOVE_AREA,
+            UPANDDOWN_AREA,
+            ILLEGAL_AREA
+        };
+
+        enum class UpAndDownNavStatus
+        {
+            NOT_START, 
+            SPIN,       // 旋转调整角度
+            RELOCATING, // 重定位停车
+            LINEAR      // 调整角度后线性行驶
+        };
+
         /*****************************************/
         /*************1. 私有函数 start************/
         /*****************************************/
@@ -177,8 +202,6 @@ namespace hnurm_behavior_trees
 
         void initialization(); // 其他初始化工作，【被PubRobotStatus构造函数调用】
 
-        void change_cruise_mode_aft_human_goal(); // 根据目标点所属区域更新巡航状态，【被CheckIsReached_Update调用】
-
         geometry_msgs::msg::Pose get_targetpose_in_map(float &distance);
 
         void create_pursue_stay_circle_path(); // 创建追击静止小陀螺的路径点队列，围绕目标点做一个半径为0.5m的圆
@@ -239,20 +262,6 @@ namespace hnurm_behavior_trees
         /**************************2. 订阅、发布相关变量 end******************************/
 
         /*********************3. 巡航相关变量 start ******************************/
-        // 读取参数文件，获取巡航、补给、特殊点位、特殊区域、特殊路径的所有路径点，通过名字获取
-        enum class CruiseMode
-        {
-            HUMAN,         // 云台手发送的目标点
-            SUPPLY,        // 补给点
-            MY_FORT,       // 我方堡垒点
-            OPPONENT_FORT, // 敌方堡垒点
-            MY_HALF,       // 我方半场路径
-            OPPONENT_HALF, // 敌方半场路径
-
-            HIGHLAND,        // 高地-默认环绕路径
-            HIGHLAND_AMBUSH, // 高地-阻击路径（前哨区域）
-            HIGHLAND_MIXED   // 高地-混合路径
-        };
         std::unordered_map<CruiseMode, std::vector<GlobalPose>> path_pose_arrays_;
 
         // 当前的目标点队列
@@ -260,8 +269,8 @@ namespace hnurm_behavior_trees
 
         GlobalPose current_x_y_; // 当前机器人的坐标点,来自nav2的footprint回调
 
-        CruiseMode current_cruise_mode_;  // 当前巡航模式，用来改变巡航路径【human,cruise_goals_supply,cruise_goals_fort,cruise_goals_my_half,cruise_goals_opponent_half,cruise_goals_highland_mixed】
-        CruiseMode previous_cruise_mode_; // 记录上一次巡航模式，用于判断巡航模式是否切换
+        CruiseMode current_cruise_mode_ = CruiseMode::MY_HALF;  // 当前巡航模式，默认为MY_HALF
+        CruiseMode previous_cruise_mode_ = CruiseMode::MY_HALF; // 记录上一次巡航模式，用于判断巡航模式是否切换
 
         std::chrono::steady_clock::time_point current_cruise_mode_start_time; // 上次使用当前巡航路径的时间点，用于达到阈值切换巡航路径，追击探测到目标后将current_cruise_mode_start_time重置为当前时间，主要防止单巡航路线长时间运行但是没有起作用
 
@@ -276,19 +285,6 @@ namespace hnurm_behavior_trees
         /************************4. 追击相关变量 end ******************************/
 
         /************************5. 特殊区域相关变量 start ******************************/
-        enum class SpecialAreaType
-        {
-            MOVE_AREA,
-            UPANDDOWN_AREA,
-            ILLEGAL_AREA
-        };
-        enum class UpAndDownNavStatus
-        {
-            NOT_START, 
-            SPIN,       // 旋转调整角度
-            RELOCATING, // 重定位停车
-            LINEAR      // 调整角度后线性行驶
-        };
         std::unordered_map<SpecialAreaType, std::vector<GlobalPose>> special_area_poses_;   // 特殊区域的所有边界点，通过名字获取
         std::unordered_map<std::string, std::vector<GlobalPose>> special_area_from_params_; // 从参数文件中读取的特殊区域的所有边界点，通过名字获取
 
@@ -308,15 +304,15 @@ namespace hnurm_behavior_trees
         /************************5. 特殊区域相关变量 end ******************************/
 
         /************************6. FSM状态相关变量 start ******************************/
-        bool is_pose_from_human_; // 标记是否接受到云台手发送的目标点
+        bool is_pose_from_human_ = false; // 标记是否接受到云台手发送的目标点
 
-        bool is_need_supply_; // 标记是否需要补给
+        bool is_need_supply_ = false; // 标记是否需要补给
 
-        bool is_pursue_; // 标记是否需要追击
+        bool is_pursue_ = false; // 标记是否需要追击
 
-        bool is_cruise_; // 标记是否需要巡航
+        bool is_cruise_ = true; // 标记是否需要巡航，默认开启
 
-        bool is_in_upanddown_area_; // 是否在起伏路段区域的标志位
+        bool is_in_upanddown_area_ = false; // 是否在起伏路段区域的标志位
 
         /************************6. FSM状态相关变量 end ******************************/
 

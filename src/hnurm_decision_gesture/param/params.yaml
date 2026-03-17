@@ -14,6 +14,8 @@
       upanddown_path: ["3.04,-2.08", "4.46,0.04", "6.20,1.25", "7.65,3.58"] # 红色起伏路段穿过路径,依次为左端出区域点，起伏起始点，起伏结束点，右端出区域点
       upanddown_polygon: ["7.37,1.19", "6.55,2.31", "3.16,0.04", "4.09,-1.09"] # 小长方形
       move_polygon: ["10.06,0.97", "7.03,5.23", "0.96,1.03", "0.51,-1.44", "2.71,-4.22"] # 巡航区域
+
+    
     global_position_topic: "/global_costmap/published_footprint"
     cmd_vel_topic: "/cmd_vel"
     cmd_vel_remap_topic: "/cmd_vel_remap"
