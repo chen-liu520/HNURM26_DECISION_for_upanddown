@@ -25,3 +25,7 @@
 `ros2 launch hnurm_decision_gesture params_visualizer.launch.py`
 - 可视化标记的点和路径
 - 在新开的rviz2里点击add 选择MarkerArray即可
+
+
+## 问题：
+- 从黑板读取的goalpose为空会导致决策节点崩溃，直接删除
