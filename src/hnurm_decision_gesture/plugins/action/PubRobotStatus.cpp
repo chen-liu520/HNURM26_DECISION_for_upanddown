@@ -63,7 +63,7 @@ namespace hnurm_behavior_trees
         is_cruise_ = true;                                                 // 默认初始为巡航模式
         is_in_upanddown_area_ = false;                                     // 初始化起伏路段状态
         is_current_fill_upanddown_goal_vector_ = false;                    // 初始化起伏路段目标队列填充状态
-        FillGoalsDeque_Cruise();
+        
 
         if (self_color_ == SelfColor::RED)
         {
@@ -75,6 +75,8 @@ namespace hnurm_behavior_trees
         }
         special_area_poses_[SpecialAreaType::MOVE_AREA] = special_area_from_params_["move_polygon"];
         special_area_poses_[SpecialAreaType::UPANDDOWN_AREA] = special_area_from_params_["upanddown_polygon"];
+
+        FillGoalsDeque_Cruise();
 
         is_init_ = true; // 初始化完成
     }
@@ -428,15 +430,33 @@ namespace hnurm_behavior_trees
     void PubRobotStatus::FillGoalsDeque_Cruise()
     {
         // mode ：【human,cruise_goals_supply,cruise_goals_my_fort,cruise_goals_my_fort, cruise_goals_my_half,cruise_goals_opponent_half,cruise_goals_highland_mixed, cruise_goals_highland_ambush】
+        // current_cruise_goal_deque_.clear();
+
+        // if (current_cruise_mode_ == CruiseMode::MY_HALF) // 补给模式只装填补给点
+        // {
+        //     for (int i = 0; i < 2; ++i)
+        //     {
+        //         current_cruise_goal_deque_.push_back(human_goal_pose_);
+        //     }
+        //     current_cruise_goal_deque_.pop_back();
+        // }
         current_cruise_goal_deque_.clear();
 
-        if (current_cruise_mode_ == CruiseMode::MY_HALF) // 补给模式只装填补给点
+        // 从 path_pose_arrays_ 获取当前模式对应的路径点
+        auto it = path_pose_arrays_.find(current_cruise_mode_);
+        if (it != path_pose_arrays_.end() && !it->second.empty())
         {
-            for (int i = 0; i < 2; ++i)
+            for (const auto &pose : it->second)
             {
-                current_cruise_goal_deque_.push_back(human_goal_pose_);
+                current_cruise_goal_deque_.push_back(pose);
             }
-            current_cruise_goal_deque_.pop_back();
+            RCLCPP_INFO(node_->get_logger(), "[FillGoalsDeque_Cruise] 已填充巡航队列，模式: %s, 点数: %zu",
+                        cruiseModeToString(current_cruise_mode_).c_str(), current_cruise_goal_deque_.size());
+        }
+        else
+        {
+            RCLCPP_WARN(node_->get_logger(), "[FillGoalsDeque_Cruise] 当前模式 %s 没有可用的路径点",
+                        cruiseModeToString(current_cruise_mode_).c_str());
         }
     }
 
@@ -527,7 +547,7 @@ namespace hnurm_behavior_trees
         try
         {
             // 使用50ms前的TF数据，平衡实时性和查询速度
-            rclcpp::Time target_time = node_->now() - rclcpp::Duration::from_seconds(0.05);
+            rclcpp::Time target_time = node_->now() - rclcpp::Duration::from_seconds(0.08);
             map_to_base_footprint = tf_buffer_->lookupTransform(
                 "map",
                 "base_footprint",
@@ -909,12 +929,6 @@ namespace hnurm_behavior_trees
         RCLCPP_INFO_THROTTLE(node_->get_logger(), *node_->get_clock(), 500, "\033[35m当前坐标: (%.2f, %.2f)，当前区域: %s\033[0m",
                              current_x_y_.pose_x, current_x_y_.pose_y,
                              current_my_area_ == SpecialAreaType::UPANDDOWN_AREA ? "起伏路段" : (current_my_area_ == SpecialAreaType::MOVE_AREA ? "移动区域" : "非法区域"));
-        auto cruise_goal = config().blackboard->get<geometry_msgs::msg::PoseStamped>("cruise_goal");
-
-        RCLCPP_INFO_THROTTLE(node_->get_logger(), *node_->get_clock(), 500,
-                             "\033[35m当前cruise目标点：(%.2f, %.2f)\033[0m",
-                             cruise_goal.pose.position.x,
-                             cruise_goal.pose.position.y);
         RCLCPP_INFO_THROTTLE(node_->get_logger(), *node_->get_clock(), 500, "\033[35m当前起伏路段状态：%s\033[0m", upanddownNavStatusToString(upanddown_nav_status_).c_str());
         RCLCPP_INFO_THROTTLE(node_->get_logger(), *node_->get_clock(), 500, "\033[35m----------------------------------------------------------------\033[0m");
     }
