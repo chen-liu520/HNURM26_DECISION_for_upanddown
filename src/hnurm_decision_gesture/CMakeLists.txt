@@ -57,8 +57,19 @@ ament_target_dependencies(decision_node
   std_srvs
 )
 
-# Install executable
-install(TARGETS decision_node
+# Create params visualizer executable
+add_executable(params_visualizer 
+  src/params_visualizer.cpp
+)
+
+ament_target_dependencies(params_visualizer
+  rclcpp
+  visualization_msgs
+  geometry_msgs
+)
+
+# Install executables
+install(TARGETS decision_node params_visualizer
   DESTINATION lib/${PROJECT_NAME}
 )
 
@@ -74,6 +85,11 @@ install(DIRECTORY launch
 
 # Install param files
 install(DIRECTORY param
+  DESTINATION share/${PROJECT_NAME}
+)
+
+# Install rviz config files
+install(DIRECTORY rviz
   DESTINATION share/${PROJECT_NAME}
 )
 

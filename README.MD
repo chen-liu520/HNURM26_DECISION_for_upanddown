@@ -19,3 +19,9 @@
 
 ### 运行TF测试节点
 `ros2 run gimbal_rotation_server test_tf`
+
+
+## 可视化
+`ros2 launch hnurm_decision_gesture params_visualizer.launch.py`
+- 可视化标记的点和路径
+- 在新开的rviz2里点击add 选择MarkerArray即可

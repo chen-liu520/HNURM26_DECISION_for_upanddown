@@ -628,7 +628,7 @@ namespace hnurm_behavior_trees
 
     PubRobotStatus::SpecialAreaType PubRobotStatus::GetPointArea(const GlobalPose &point)
     {
-        // 注意这里的顺序，为了避免有洞区域的复杂判断，对洞内区域(双方堡垒)先判断，是的话直接返回，不是的话才会判断是不是属于其他区域（包括套着他的区域（双方半场））
+        // 注意这里的顺序，为了避免有洞区域的复杂判断，对洞内区域(双方堡垒)先判断，是的话直接返回，不是的话才会判断是不是属于其他区域（包括套着他的区域（双方半场）））
         // 顺序：1. 双方堡垒 2. 双方起伏路段 3. 高地 4. 双方半场
         std::vector<SpecialAreaType> check_order = {
             SpecialAreaType::UPANDDOWN_AREA,
@@ -637,6 +637,7 @@ namespace hnurm_behavior_trees
         {
             if (is_in_this_polygon(point, special_area_poses_[type]))
             {
+                // RCLCPP_DEBUG(node_->get_logger(), "点(%.2f, %.2f) 在区域 %d 内", point.pose_x, point.pose_y, static_cast<int>(type));
                 return type;
             }
         }
@@ -908,6 +909,12 @@ namespace hnurm_behavior_trees
         RCLCPP_INFO_THROTTLE(node_->get_logger(), *node_->get_clock(), 500, "\033[35m当前坐标: (%.2f, %.2f)，当前区域: %s\033[0m",
                              current_x_y_.pose_x, current_x_y_.pose_y,
                              current_my_area_ == SpecialAreaType::UPANDDOWN_AREA ? "起伏路段" : (current_my_area_ == SpecialAreaType::MOVE_AREA ? "移动区域" : "非法区域"));
+        auto cruise_goal = config().blackboard->get<geometry_msgs::msg::PoseStamped>("cruise_goal");
+
+        RCLCPP_INFO_THROTTLE(node_->get_logger(), *node_->get_clock(), 500,
+                             "\033[35m当前cruise目标点：(%.2f, %.2f)\033[0m",
+                             cruise_goal.pose.position.x,
+                             cruise_goal.pose.position.y);
         RCLCPP_INFO_THROTTLE(node_->get_logger(), *node_->get_clock(), 500, "\033[35m当前起伏路段状态：%s\033[0m", upanddownNavStatusToString(upanddown_nav_status_).c_str());
         RCLCPP_INFO_THROTTLE(node_->get_logger(), *node_->get_clock(), 500, "\033[35m----------------------------------------------------------------\033[0m");
     }
